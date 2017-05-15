@@ -9,6 +9,8 @@ languages = [ 'ar', 'cs', 'de', 'es', 'es-rUS', 'fr', 'hu', 'in', 'it', 'iw', 'j
 #good for Titan
 overlay_root = "vendor/Vertu/overlays/common"
 
+glob_non_trans_comp = 0
+
 def findResFiles(wa):
   reslist = []
   for basedir,dirs,files in os.walk(wa):
@@ -39,13 +41,22 @@ def findResComponent(filename):
   inp = open(filename, 'rU')
   #w_inp = inp.read()
   string_names = []
+  # Need to check for "do not translate" in the comment the line before the string
+  # also check for translatable=false, only take strings that are translateable
+  dnt = False
   for line in inp:
+
+    dnt_match = re.search(r'[Dd]o not translate',line)
+
     match = re.search(r'<string name="(\S+?)"',line)
     # discard the non translatable strings
-    if match:
+    if match and not dnt:
       match2 = re.search(r'translatable="false"',line)
       if not match2:
         string_names.append(match.group(1))
+    #set dnt true here
+    if dnt_match : dnt = True
+
 
   # get all resource names and strings? (do we just need resource names?)
   #string_names = re.findall(r'<string name="(\S+?)"', w_inp)
@@ -56,10 +67,11 @@ def findResComponent(filename):
   #print string_names
   missing_dict = {}
   #take "values" from the path
-  for basedir, dirs, files in os.walk(os.path.join(dir,'..')):
+  upper_dir = os.path.dirname(dir)
+  for basedir, dirs, files in os.walk(upper_dir):
     # find localised folders
     #print basedir
-    match = re.search(r'../values-(\S+)', basedir)
+    match = re.search(r'values-(\S+)', basedir)
     if match and match.group(1) in languages:
       in_fn = os.path.join(basedir, 'strings.xml')
       if os.path.isfile(in_fn):
@@ -69,6 +81,7 @@ def findResComponent(filename):
         loc_file.close()
         #look for overlay and append it to the file if exists
         ov_fn = os.path.join(overlay_root,in_fn)
+        #print ov_fn
         if os.path.isfile(ov_fn):
           #print "Overlay found : " + ov_fn
           ov_file = open(ov_fn)
@@ -107,7 +120,7 @@ def printFileResults(file,resdict,level):
   non_trans = 0
   lst = []
   if resdict:
-    print "%s: %d partially translated strings:" % (file,len(resdict.keys()))
+    if level < 2 : print "\n%s: %d partially translated strings:" % (file,len(resdict.keys()))
     for key in sorted(resdict.keys()):
       if level < 2:
         print key, resdict[key]
@@ -115,8 +128,11 @@ def printFileResults(file,resdict,level):
         non_trans += 1
         lst.append(key)
     if lst:
-      print " of which %d non translated: " % non_trans
+      if level == "2" : print "\n%s : %d non_translated :" % (file,non_trans)
+      else : print " of which %d non translated: " % non_trans
       print lst
+      global glob_non_trans_comp
+      glob_non_trans_comp += 1
 
 # given a list of string xml files and paths, find all string resource id's
 # then match through all localised folders, storing if it is not found
@@ -145,9 +161,12 @@ def main():
 
   all_res_files = findResFiles(workarea)
   print all_res_files
-  print 'Out of %d components found : ' % len(all_res_files)
+  print '\nOut of %d components found : ' % len(all_res_files)
 
   findMissingResources(all_res_files,level)
+
+  global glob_non_trans_comp
+  print "\n%d components have non translated strings" % glob_non_trans_comp
 
 if __name__ == '__main__':
   main()
